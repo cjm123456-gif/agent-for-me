@@ -83,6 +83,45 @@ class ChatService:
             }
 
         ]
+        #它仅仅实现了将对应项目的历史记录存入了内存，一旦停止进程记录就没了
+        self.history_by_project = {
+            self.project_context.key: self.messages
+        }
+    def switch_project(self,new_context:ProjectContext)->None:
+        """
+        这是一个切换项目目录后，对工具绑定、项目、历史消息，进行读取
+        """
+        #先保存当前项目的历史记录
+        old_key = self.project_context.key
+        self.history_by_project[old_key] = self.messages
+
+        #根据新项目创建新的工具
+        new_reader = create_tools(new_context)
+
+        #创建新项目的工具表
+        new_tools = {
+            "read_project_file": new_reader,
+        }
+
+        #绑定模型
+        new_model_with_tools = create_model_with_tools(
+            [new_reader]
+        )
+
+        #访问过的项目回复这个项目的历史
+        new_messages = self.history_by_project.get(
+            new_context.key
+        )
+        #如果第一次打开这个项目，就只保留系统消息
+        if new_messages is None:
+            new_messages = self.messages[:1]
+            self.history_by_project[new_context.key] = new_messages
+        #全部进行替换，使用新的绑定和对话记录
+        self.project_context = new_context
+        self.read_project_file = new_reader
+        self.tools = new_tools
+        self.model_with_tools = new_model_with_tools
+        self.messages = new_messages
 
     def chat(self, user_input):
         self.messages.append(
