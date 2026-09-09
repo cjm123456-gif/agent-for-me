@@ -1,13 +1,15 @@
 from dotenv import load_dotenv
+from pathlib import Path
+
 import os
 
 # 调用模型的key与url
 #调用的.env文件中的API和base_url这样更安全(这是load_dotenv库的功能)
-load_dotenv()
+ENV_FILE = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=ENV_FILE)
 DEEPSEEK_API_KEY= os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_BASE_URL=os.getenv("DEEPSEEK_BASE_URL")
 DEEPSEEK_MODEL= os.getenv("DEEPSEEK_MODEL")
-
 
 if not DEEPSEEK_API_KEY:
     raise ValueError("没有找到api_key，请检查api_key是否正确，检查.env文件")

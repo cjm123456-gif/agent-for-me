@@ -12,14 +12,13 @@ class ProjectContext:
     def from_input(
             cls,
             raw_path:str|None,
-            base_dir:Path,
             default_root: Path,
                    )->"ProjectContext":
         """
         根据输入创建项目的上下文
         raw_path:输入创建项目的上下文，可以是空。
-        base_dir:相对路径的项目路径，也可以是程序启动目录。
-        defult_root:用户没有输入路径使用的默认项目目录
+        default_root:用户没有输入路径使用的默认项目目录
+        默认采用的当前电脑的桌面路径
         """
         path_text = (raw_path or "").strip()
         if not path_text:
@@ -45,7 +44,7 @@ class ProjectContext:
             )
         if not candidate.is_dir():
             raise ProjectContextError(
-                f"指定路径不存在该文件：{candidate}"
+                f"指定路径不是目录：{candidate}"
             )
 
         return cls(candidate)
@@ -60,7 +59,7 @@ class ProjectContext:
                 "文件路径不能为空"
             )
         path = Path(relative_path)
-        #判断传入的是不是绝对路径
+        # 判断传入的是不是绝对路径
         if path.is_absolute():
             raise ProjectContextError(
                 "读取文件时只能使用项目内的相对路径"
@@ -69,7 +68,7 @@ class ProjectContext:
 
         # relative_to(base_path)计算candidate相对于self.root的相对路径。
         # 如果candidate在root的内部：正常返回相对路径不会报错
-        #如果candidate不在root里面：抛出错误提醒
+        # 如果candidate不在root里面：抛出错误提醒
         try:
             candidate.relative_to(self.root)
         except ValueError:

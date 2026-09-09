@@ -5,7 +5,7 @@ from backend.core.project_context import (
     ProjectContextError,
 )
 
-def create_read_project_file(project_context: ProjectContext):
+def create_tools(project_context: ProjectContext):
     @tool
     def read_project_file(relative_path: str)-> str:
         """读取项目根目录内指定相对路径的文本文件。"""
@@ -52,10 +52,11 @@ def create_read_project_file(project_context: ProjectContext):
             return"错误：文件不存在"
         if not file_path.is_file():
             return"错误：指定路径不是文件"
+        #读取文件
         try:
             return file_path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return"错误：文件不是 UTF-8 文本文件"
+        except UnicodeDecodeError:
+            return "错误：文件不是 UTF-8 文本文件"
         except OSError as error:
             return f"错误：读取文件夹失败：{error}"
 

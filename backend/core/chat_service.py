@@ -1,11 +1,26 @@
 from langchain_core.messages import ToolMessage
-from backend.core.llm_client import model_with_tools
-from backend.tools.file_tools import read_project_file
+from backend.core.llm_client import create_model_with_tools
+from backend.core.project_context import ProjectContext
+from backend.tools.file_tools import create_tools
 
 
 #进行多轮对话
 class ChatService:
-    def __init__(self):
+    def __init__(self,project_context: ProjectContext):
+        #定义对话内的路径全局变量，调用项目文件定义方法
+        self.project_context = project_context
+        #将项目的路径输入工具工厂，创建LangChain工具
+        self.read_project_file = create_tools(
+            self.project_context
+        )
+        #定义工具
+        self.tools = {
+            "read_project_file": self.read_project_file,
+        }
+        #将工具与模型进行绑定
+        self.model_with_tools = create_model_with_tools(
+            [self.read_project_file]
+        )
         #初始化系统消息和历史记录
         self.messages = [
             {
@@ -68,6 +83,7 @@ class ChatService:
             }
 
         ]
+
     def chat(self, user_input):
         self.messages.append(
           {
@@ -75,12 +91,11 @@ class ChatService:
             "content":user_input
            }
         )
-        TOOLS = {
-            "read_project_file": read_project_file,
-        }
         while True:
             #把全部的历史消息传输给,绑定了工具的AI
-            response = model_with_tools.invoke(self.messages)
+            response = self.model_with_tools.invoke(
+                self.messages
+            )
             #把AI返回的消息存入历史
             self.messages.append(response)
             #如果不需要调用工具直接返回消息，退出while循环
@@ -88,7 +103,7 @@ class ChatService:
                 return response.content
             #如果需要调用工具进入for循环
             for tool_call in response.tool_calls:
-                tool = TOOLS.get(tool_call["name"])
+                tool = self.tools.get(tool_call["name"])
                 #AI输出了一个不存在的工具名
                 if tool is None:
                     tool_result = f"错误：未知工具 {tool_call['name']}"

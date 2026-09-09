@@ -1,5 +1,5 @@
 # 自己做一个harness,开源到github上
-
+## **作者：白面123**
 目标:
 1、我打算后台制作许多的Agent工具，模型就用Deepseek实现一个自制的Agent
 专门用来辅助程序员编程的AIcoding工具。
