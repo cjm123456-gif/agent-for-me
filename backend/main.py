@@ -1,7 +1,6 @@
 from backend.core.chat_service import ChatService
 
 
-
 chat_service = ChatService()
 while True:
     user_input = input("用户：")
