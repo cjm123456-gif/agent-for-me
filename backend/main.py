@@ -5,10 +5,13 @@ from backend.core.project_context import (
     ProjectContext,
     ProjectContextError,
 )
+from backend.core.history_store import HistoryStore
 
 #读取本机的桌面路径作为默认路径
 DEFAULT_PROJECT_ROOT = Path.home() / "Desktop"
-
+HISTORY_ROOT = (
+    Path.home()/".cjm_harness"/"history_talk"
+)
 def choose_initial_project()->ProjectContext:
     """
     进行一个循环：
@@ -64,13 +67,33 @@ def perse_select_project_command(
         path_text = path_text[1:-1].strip()
     return path_text
 
+def print_visible_history(chat_service:ChatService)->None:
+    """
+    打印项目的历史对话
+    :param chat_service:
+    :return:
+    """
+    visible_history = chat_service.format_visible_history()
+
+    if not visible_history:
+        return
+    print(f"\n===================== 当前项目历史会话 =====================")
+    print(visible_history)
+    print("="*80)
+
 def main():
 
     project_context = choose_initial_project()
 
     print(f"当前项目{project_context.root}")
+    history_store = HistoryStore(HISTORY_ROOT)
+
     #用输入或默认的路径调用ChatService，确认读取路径、启动模型绑定工具
-    chat_service = ChatService(project_context)
+    chat_service = ChatService(
+        project_context,
+        history_store,
+    )
+    print_visible_history(chat_service)
     while True:
         user_input = input("用户：")
         if user_input.lower().strip() in [
@@ -96,11 +119,12 @@ def main():
                 continue
             project_context = new_context
             print(f"当前项目：{project_context.root}")
+            print_visible_history(chat_service)
             # 非常重要：命令处理完后不要继续调用 AI，不是用切换项目的指令给AI去理解
             continue
         answer = chat_service.chat(user_input)
         print("AI: ",answer)
-        print("="*80)
+        print("=" * 80)
 
 if __name__ == "__main__":
     main()

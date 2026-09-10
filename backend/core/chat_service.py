@@ -1,14 +1,25 @@
-from langchain_core.messages import ToolMessage
 from backend.core.llm_client import create_model_with_tools
 from backend.core.project_context import ProjectContext
 from backend.tools.file_tools import create_tools
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from backend.core.history_store import HistoryStore
 
 
 #进行多轮对话
 class ChatService:
-    def __init__(self,project_context: ProjectContext):
+    def __init__(self,
+                 project_context: ProjectContext,
+                 history_store: HistoryStore,
+                 ):
         #定义对话内的路径全局变量，调用项目文件定义方法
         self.project_context = project_context
+        self.history_store = history_store
         #将项目的路径输入工具工厂，创建LangChain工具
         self.read_project_file = create_tools(
             self.project_context
@@ -22,10 +33,8 @@ class ChatService:
             [self.read_project_file]
         )
         #初始化系统消息和历史记录
-        self.messages = [
-            {
-                "role":"system",
-                 "content": "#角色"
+        self.system_prompt= (
+                   "#角色"
                    "你是一名高级 AI 编程工程师与 Agent 工具调用专家，擅长根据用户需求分析任务、编写代码、调试程序，并自主判断何时调用可用的 Agent 工具完成任务。"
                    "你的核心原则是：能直接回答的问题直接回答；需要外部能力、真实数据、文件操作、接口调用或专业工具才能完成的任务，优先调用对应工具，而不是凭空猜测。"
                    "目标"
@@ -80,19 +89,55 @@ class ChatService:
                    "面对编程问题：能修就修。能写就写。能执行工具就执行。"
                    "需要多个工具就按顺序执行。工具失败就分析并尝试修正。"
                    "最终给用户一个清晰、准确、可执行的结果。"
-            }
-
-        ]
-        #它仅仅实现了将对应项目的历史记录存入了内存，一旦停止进程记录就没了
+        )
+        self.messages = self._load_or_create_messages(
+            self.project_context
+        )
         self.history_by_project = {
             self.project_context.key: self.messages
         }
+    def _create_initial_messages(self,
+                                 )->list[BaseMessage]:
+        """
+        创建会话最开始的初始消息列表：系统提示词
+        :return:
+        """
+        return[
+            SystemMessage(
+                content = self.system_prompt
+            )
+        ]
+
+
+    def _load_or_create_messages(self,
+                                 project_context: ProjectContext,
+                                 )->list[BaseMessage]:
+        """
+        尝试加载JSON恢复对话，如果JSON不存在创建新的对话
+        :param project_context:
+        :return:
+        """
+        save_messages = self.history_store.load(
+            project_context.key
+        )
+        if save_messages is  not None:
+            return save_messages
+
+        return self._create_initial_messages()
+
+    def _save_current_history(self)->None:
+        self.history_store.save(
+            self.project_context.key,
+            self.messages
+        )
+
     def switch_project(self,new_context:ProjectContext)->None:
         """
         这是一个切换项目目录后，对工具绑定、项目、历史消息，进行读取
         """
         #先保存当前项目的历史记录
         old_key = self.project_context.key
+        self._save_current_history()
         self.history_by_project[old_key] = self.messages
 
         #根据新项目创建新的工具
@@ -112,9 +157,11 @@ class ChatService:
         new_messages = self.history_by_project.get(
             new_context.key
         )
-        #如果第一次打开这个项目，就只保留系统消息
+        #如果第一次打开这个项目
         if new_messages is None:
-            new_messages = self.messages[:1]
+            new_messages = self._load_or_create_messages(
+                new_context
+            )
             self.history_by_project[new_context.key] = new_messages
         #全部进行替换，使用新的绑定和对话记录
         self.project_context = new_context
@@ -123,12 +170,47 @@ class ChatService:
         self.model_with_tools = new_model_with_tools
         self.messages = new_messages
 
+    def format_visible_history(self)->str:
+        """
+        打印项目的历史会话：
+        用户：XXX
+        AI：XXX
+        :return:
+        """
+        blocks: list[str] = []
+        current_block: list[str] = []
+        for message in self.messages:
+            if isinstance(message,HumanMessage):
+                if current_block:
+                    blocks.append("\n".join(current_block))
+
+                current_block = [
+                    f"用户: {message.content}"
+                ]
+            elif(
+                isinstance(message, AIMessage)
+                and not message.tool_calls
+                #只打印字符串内容
+                and isinstance(message.content,str)
+                #空回复不打印
+                and message.content.strip()
+            ):
+                current_block.append(f"AI: {message.content}")
+        #把遍历出来的对话添加到blocks中
+        if current_block:
+            blocks.append("\n".join(current_block))
+        separator = "\n" + "=" * 80 + "\n"
+        return separator.join(blocks)
+
+
+
     def chat(self, user_input):
+
         self.messages.append(
-          {
-            "role":"user",
-            "content":user_input
-           }
+            HumanMessage(
+            content = user_input
+        )
+
         )
         while True:
             #把全部的历史消息传输给,绑定了工具的AI
@@ -137,8 +219,9 @@ class ChatService:
             )
             #把AI返回的消息存入历史
             self.messages.append(response)
-            #如果不需要调用工具直接返回消息，退出while循环
+            #如果不需要调用工具直接返回消息
             if not response.tool_calls:
+                self._save_current_history()
                 return response.content
             #如果需要调用工具进入for循环
             for tool_call in response.tool_calls:
