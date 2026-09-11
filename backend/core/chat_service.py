@@ -20,17 +20,19 @@ class ChatService:
         #定义对话内的路径全局变量，调用项目文件定义方法
         self.project_context = project_context
         self.history_store = history_store
-        #将项目的路径输入工具工厂，创建LangChain工具
-        self.read_project_file = create_tools(
-            self.project_context
+
+        self.available_tools = create_tools(
+            self.project_context,
         )
+
         #定义工具
         self.tools = {
-            "read_project_file": self.read_project_file,
+            project_tool.name: project_tool
+            for project_tool in self.available_tools
         }
         #将工具与模型进行绑定
         self.model_with_tools = create_model_with_tools(
-            [self.read_project_file]
+            self.available_tools
         )
         #初始化系统消息和历史记录
         self.system_prompt= (
@@ -141,16 +143,16 @@ class ChatService:
         self.history_by_project[old_key] = self.messages
 
         #根据新项目创建新的工具
-        new_reader = create_tools(new_context)
+        new_available_tools = create_tools(new_context)
 
         #创建新项目的工具表
         new_tools = {
-            "read_project_file": new_reader,
+            project_tools.name: project_tools for project_tools in new_available_tools
         }
 
         #绑定模型
         new_model_with_tools = create_model_with_tools(
-            [new_reader]
+           new_available_tools,
         )
 
         #访问过的项目回复这个项目的历史
@@ -165,7 +167,7 @@ class ChatService:
             self.history_by_project[new_context.key] = new_messages
         #全部进行替换，使用新的绑定和对话记录
         self.project_context = new_context
-        self.read_project_file = new_reader
+        self.available_tools = new_available_tools
         self.tools = new_tools
         self.model_with_tools = new_model_with_tools
         self.messages = new_messages
