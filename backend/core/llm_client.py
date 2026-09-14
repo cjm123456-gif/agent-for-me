@@ -8,7 +8,12 @@ model = ChatOpenAI(
     base_url = settings.DEEPSEEK_BASE_URL,
     model = settings.DEEPSEEK_MODEL,
 )
-
+def get_model() -> ChatOpenAI:
+    """
+    返回没有绑定工具的基础模型
+    :return:
+    """
+    return model
 
 def create_model_with_tools(tools):
     """

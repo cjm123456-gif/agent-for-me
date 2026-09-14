@@ -7,6 +7,11 @@ from backend.core.project_context import (
 )
 from backend.core.history_store import HistoryStore
 
+from backend.core.task_router import  (
+    TaskRoute,
+    classify_task,
+)
+
 #读取本机的桌面路径作为默认路径
 DEFAULT_PROJECT_ROOT = Path.home() / "Desktop"
 HISTORY_ROOT = (
@@ -122,7 +127,13 @@ def main():
             print_visible_history(chat_service)
             # 非常重要：命令处理完后不要继续调用 AI，不是用切换项目的指令给AI去理解
             continue
-        answer = chat_service.chat(user_input)
+        task_route = classify_task(user_input)
+        if task_route == TaskRoute.SIMPLE_CHAT:
+            answer = chat_service.simple_chat(user_input)
+
+        else:
+            print("调用子代理中...")
+            answer = chat_service.chat(user_input)
         print("AI: ",answer)
         print("=" * 80)
 

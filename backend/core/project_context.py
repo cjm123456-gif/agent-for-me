@@ -30,11 +30,6 @@ class ProjectContext:
                 raise ProjectContextError(
                     f"目前项目输入的不是项目绝对路径：{candidate}"
                 )
-            # #判断：磁盘文件是不是真的存在并且是一个文件夹
-            # if not candidate.is_dir():
-            #     raise ProjectContextError(
-            #         f"指定路径不存在该文件：{candidate}"
-            #     )
         #expanduser()默认访问计算机~路径，转换为绝对真实路径
         candidate = candidate.expanduser().resolve()
         #exists()判断磁盘上这个路径是否存在
@@ -51,8 +46,8 @@ class ProjectContext:
 
     def resolve_read_path(self,relative_path:str)->Path:
         """
-        将项目内的相对路径解析为安全的绝对路径
-        防止逃出目前项目根目录
+        读取项目文件，路径为空判断，不为空判断是不是相对路径
+        并且还能判断文件在不在root内
         """
         if not relative_path or not relative_path.strip():
             raise ProjectContextError(
