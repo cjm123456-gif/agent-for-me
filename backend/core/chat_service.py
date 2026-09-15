@@ -18,7 +18,10 @@ from backend.core.prompts import (
     SUPERVISOR_SYSTEM_PROMPT,
     CODE_WORKER_SYSTEM_PROMPT,
 )
-
+from backend.core.supervisor_dexcision import (
+    parse_supervisor_decision,
+    SupervisorDecision,
+)
 #进行多轮对话
 class ChatService:
     def __init__(self,
@@ -58,6 +61,70 @@ class ChatService:
         self.history_by_project = {
             self.project_context.key: self.messages
         }
+    def supervisor_decide(
+            self,
+            user_input:str,
+    ) -> SupervisorDecision:
+        """
+        调度总指挥模型，并返回经过校验的路由决策
+        总指挥的内部 JSON 不会写入普通对话记录
+        :param user_input:
+        :return:
+        """
+
+        supervisor_messages = [
+            *self._build_supervisor_messages(),
+            HumanMessage(content=user_input),]
+
+        response = self.model.invoke(
+            supervisor_messages,
+        )
+
+        return parse_supervisor_decision(
+            response.content,
+        )
+
+
+
+    def handle_user_input(
+            self,
+            user_input: str,
+                          ) -> str:
+        """
+        统一处理一次用户输入，
+        先让总路指挥判断路由，
+        再根据路由选择直接回答或执行子代理
+        :param user_input:
+        :return:
+        """
+        decision = self.supervisor_decide(
+            user_input,
+        )
+
+        if decision["route"] == "direct":
+            self.messages.append(
+                HumanMessage(
+                    content=user_input,
+                )
+            )
+
+            self.messages.append(
+                AIMessage(
+                    content = decision["answer"],
+                )
+            )
+
+            self._save_current_history()
+
+            return decision["answer"]
+        return self.chat(
+            user_input,
+            worker_task = decision["task"],
+        )
+
+
+
+
     def simple_chat(
             self,
             user_input: str,
@@ -151,8 +218,12 @@ class ChatService:
                 ),
                 *visible_messages,
         ]
+
+
+
     def _build_codework_messages(
             self,
+            worker_task: str |  None = None,
     ) -> list[BaseMessage]:
         """
         构建用来读取编写代码的子代理。
@@ -163,12 +234,22 @@ class ChatService:
             for message in self.messages
             if not isinstance(message, SystemMessage)
         ]
-        return [
-                SystemMessage(
-                    content = self.codework_prompt
-                ),
-                *conversation_messages,
-            ]
+
+        worker_messages = [
+            SystemMessage(
+                content=self.codework_prompt,
+            ),
+            *conversation_messages,
+        ]
+        if worker_task:
+            worker_messages.append(
+                HumanMessage(
+                    content = worker_task,
+                )
+            )
+        return worker_messages
+
+
     def switch_project(self,new_context:ProjectContext)->None:
         """
         这是一个切换项目目录后，对工具绑定、项目、历史消息，进行读取
@@ -245,7 +326,19 @@ class ChatService:
             self,
             user_input:str,
             max_tool_rounds:int | None = None,
+            *,
+            worker_task:str | None = None,
     ):
+        """
+        运行执行子代理的工具调用循环
+        :param user_input:
+            保存到项目历史中的原始用户问题。
+        :param max_tool_rounds:
+        :param worker_task:
+            总指挥临时分配给执行子代理的任务，
+            它指加入模型请求，不写入普通历史。
+        :return:
+        """
         tool_round_limit = (
             self.max_tool_rounds
             if max_tool_rounds is None
@@ -257,16 +350,17 @@ class ChatService:
             )
 
         self.messages.append(
-
             HumanMessage(
-            content = user_input
+            content = user_input,
         )
         )
 
         for tool_round in range(tool_round_limit):
             #把全部的历史消息传输给,绑定了工具的AI
             response = self.model_with_tools.invoke(
-                self._build_codework_messages()
+                self._build_codework_messages(
+                    worker_task=worker_task
+                )
             )
             #把AI返回的消息存入历史
             self.messages.append(response)
@@ -276,17 +370,21 @@ class ChatService:
                 return response.content
             #如果需要调用工具进入for循环
             for tool_call in response.tool_calls:
-                tool = self.tools.get(tool_call["name"])
+                tool = self.tools.get(
+                    tool_call["name"]
+                )
                 #AI输出了一个不存在的工具名
                 if tool is None:
-                    tool_result = f"错误：未知工具 {tool_call['name']}"
+                    tool_result = (f"错误：未知工具 {tool_call['name']}")
                 else:
                     try:
                         #执行工具，传入AI生成的参数字典
-                        tool_result = tool.invoke(tool_call["args"])
+                        tool_result = tool.invoke(
+                            tool_call["args"]
+                        )
                     except Exception as error:
                         #获取工具调用的异常，返回错误的字符串
-                        tool_result = f"错误：工具执行失败：{error}"
+                        tool_result = (f"错误：工具执行失败：{error}")
                 #工具运行结果放入ToolMessage,加入到历史消息中
                 self.messages.append(
                     ToolMessage(
@@ -295,4 +393,7 @@ class ChatService:
                     )
                 )
         self._save_current_history()
-        return "错误：本轮工具调用次数已经达到上限，已经停止继续调用工具。"
+        return (
+            "错误：本轮工具调用次数已经达到上限，已经停止继续调用工具。"
+            "已经停止继续调用工具。"
+        )

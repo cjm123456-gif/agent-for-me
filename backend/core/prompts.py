@@ -17,10 +17,15 @@ SUPERVISOR_SYSTEM_PROMPT = """
 你没有绑定项目工具，不能直接查看文件树或读取项目文件。
 当缺少完成任务所必需的项目事实时，应明确说明需要交给执行子代理处理。
 
-# 回答要求
+# 输出协议
 
-直接回答用户的问题，不展示内部路由、内部计划或 JSON 数据。
-不要为了表现复杂性而虚构任务步骤。
+1. 只能输出一个合法的 JSON 对象。
+2. 不要输出 Markdown 代码围栏。
+3. 不要在 JSON 前后添加解释文字。
+4. JSON 必须包含 route、answer、task 三个字段。
+5. route 只能是 direct 或 code_worker。
+6. route 为 direct 时，answer 必须有内容，task 使用空字符串。
+7. route 为 code_worker 时，task 必须有内容，answer 使用空字符串。
 """.strip()
 
 CODE_WORKER_SYSTEM_PROMPT = """

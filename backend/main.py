@@ -7,11 +7,13 @@ from backend.core.project_context import (
 )
 from backend.core.history_store import HistoryStore
 
-from backend.core.task_router import  (
-    TaskRoute,
-    classify_task,
+from backend.core.supervisor_dexcision import (
+    SupervisorDecisionError,
 )
-
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+)
 #读取本机的桌面路径作为默认路径
 DEFAULT_PROJECT_ROOT = Path.home() / "Desktop"
 HISTORY_ROOT = (
@@ -127,13 +129,35 @@ def main():
             print_visible_history(chat_service)
             # 非常重要：命令处理完后不要继续调用 AI，不是用切换项目的指令给AI去理解
             continue
-        task_route = classify_task(user_input)
-        if task_route == TaskRoute.SIMPLE_CHAT:
-            answer = chat_service.simple_chat(user_input)
+        try:
+            decision = chat_service.supervisor_decide(
+                user_input,
+            )
 
-        else:
-            print("调用子代理中...")
-            answer = chat_service.chat(user_input)
+            if decision["route"] == "direct":
+                chat_service.messages.append(
+                    HumanMessage(
+                        content = user_input,
+                    )
+                )
+                chat_service.messages.append(
+                    AIMessage(
+                        content = decision["answer"],
+                    )
+                )
+                chat_service._save_current_history()
+
+                answer = decision["answer"]
+            else:
+                print("调用子代理中....")
+
+                answer = chat_service.chat(
+                    user_input,
+                    worker_task = decision["task"],
+                )
+        except SupervisorDecisionError as error:
+            print(f"总指挥决策失败:{error}")
+            continue
         print("AI: ",answer)
         print("=" * 80)
 
