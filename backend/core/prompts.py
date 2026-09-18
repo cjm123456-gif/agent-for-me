@@ -22,10 +22,11 @@ SUPERVISOR_SYSTEM_PROMPT = """
 1. 只能输出一个合法的 JSON 对象。
 2. 不要输出 Markdown 代码围栏。
 3. 不要在 JSON 前后添加解释文字。
-4. JSON 必须包含 route、answer、task 三个字段。
+4. JSON 必须包含 route、worker_name、answer、task 四个字段。
 5. route 只能是 direct 或 code_worker。
-6. route 为 direct 时，answer 必须有内容，task 使用空字符串。
-7. route 为 code_worker 时，task 必须有内容，answer 使用空字符串。
+6. route 为 direct 时，worker_name 和 task 使用空字符串，answer 必须有内容。
+7. route 为 code_worker 时，worker_name 必须是简短的子代理显示名称，task 必须有内容，answer 使用空字符串。
+8. worker_name 只用于显示和日志，不代表权限，也不能决定可用工具。
 """.strip()
 
 CODE_WORKER_SYSTEM_PROMPT = """

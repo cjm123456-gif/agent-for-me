@@ -22,6 +22,7 @@ from backend.core.supervisor_dexcision import (
     parse_supervisor_decision,
     SupervisorDecision,
 )
+from collections.abc import Iterator
 #进行多轮对话
 class ChatService:
     def __init__(self,
@@ -61,6 +62,30 @@ class ChatService:
         self.history_by_project = {
             self.project_context.key: self.messages
         }
+    def _stream_model_text(
+            self,
+            messages: list[BaseMessage],
+            ) -> Iterator[str]:
+        """
+        使用基础模型流式生成文本。
+        这个方法只负责读取模型输出，
+        不负责打印、不负责保存历史。
+        :param messages:
+        :return:
+        """
+        for chunk in self.model.stream(
+                messages,
+        ):
+            content = chunk.content
+
+            if not isinstance(content, str):
+                continue
+
+            if not content:
+                continue
+
+            yield content
+
     def supervisor_decide(
             self,
             user_input:str,
@@ -84,27 +109,25 @@ class ChatService:
             response.content,
         )
 
-
-
     def handle_user_input(
             self,
-            user_input: str,
-                          ) -> str:
+            user_input:str,
+    ) -> str:
         """
-        统一处理一次用户输入，
-        先让总路指挥判断路由，
-        再根据路由选择直接回答或执行子代理
+        统一处理用户输入。
+
+        先让总指挥判断路由，
+        再根据路由选择直接回答或者执行子代理
         :param user_input:
         :return:
         """
         decision = self.supervisor_decide(
             user_input,
         )
-
         if decision["route"] == "direct":
             self.messages.append(
                 HumanMessage(
-                    content=user_input,
+                    content =  user_input,
                 )
             )
 
@@ -117,10 +140,12 @@ class ChatService:
             self._save_current_history()
 
             return decision["answer"]
+
         return self.chat(
             user_input,
             worker_task = decision["task"],
         )
+
 
 
 
